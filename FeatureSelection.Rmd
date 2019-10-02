@@ -1,0 +1,447 @@
+---
+title: "Feature Extraction"
+author: "AE"
+date: "9/26/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Feature Extraction in R
+
+## PCA
+This will be done in conjunction with SVM classification.
+
+### Importing the Data
+```{r DataImport}
+library(readr)
+Wine <- read_csv("Data/Wine.csv")
+#View(Wine)
+sum(is.na(Wine))
+summary(Wine)
+```
+
+### Create the Train/Test Split
+```{r Data}
+library(caTools)
+set.seed(42)
+split = sample.split(Wine$Customer_Segment, SplitRatio = 0.8)
+Train_set = subset(Wine, split == TRUE)
+Test_set = subset(Wine, split == FALSE)
+```
+
+### Feature Scaling
+```{r Scaling}
+Train_set[-14] = scale(Train_set[-14]) 
+Test_set[-14] = scale(Test_set[-14])
+```
+
+### Apply PCA
+```{r ApplyPCA}
+library(caret)
+library(e1071)
+
+pca = preProcess(x = Train_set[-14], method = 'pca', pcaComp = 2)
+
+#Training Set
+Train_set_pca = predict(pca, Train_set)
+View(Train_set_pca)
+#Note that the dependant variable is now in the first column, I'm going to move that just for the readibility of users
+Train_set_pca = Train_set_pca[c(2,3,1)]
+
+#Test Set
+Test_set_pca = predict(pca, Test_set)
+Test_set_pca = Test_set_pca[c(2,3,1)]
+```
+
+### Fitting the SVM Model
+```{r LogModel}
+classif = svm(formula = Customer_Segment ~ .,
+              data = Train_set_pca,
+              type = 'C-classification',
+              kernal = 'linear')
+
+```
+
+### Predictions
+```{r Predicts}
+preds = predict(classif, 
+                newdata = Test_set_pca[-3])
+cm = table(Test_set_pca[,3], preds)
+cm
+```
+
+### Visualizing the Training Set
+```{r VizTrain_PCA}
+library(ElemStatLearn)
+set = Train_set_pca
+X1 = seq(min(set[,1])-1, max(set[,1])+1, by = 0.01)
+X2 = seq(min(set[,2])-1, max(set[,2])+1, by = 0.01)
+grid_set = expand.grid(X1, X2)
+colnames(grid_set) = c('PC1', 'PC2')
+y_grid = predict(classif, newdata = grid_set)
+plot(set[,-3],
+     main = "SVM with SVM (Training Set)",
+     xlab = "PC1", ylab = "PC2",
+     xlim = range(X1), ylim = range(X2))
+contour(X1, X2,
+        matrix(as.numeric(y_grid), 
+               length(X1), length(X2)),
+        add = TRUE)
+points(grid_set, pch = ".", 
+       col = ifelse(
+       y_grid == 1, 'springgreen3',
+       ifelse(y_grid == 2, 
+              'tomato', 'deepskyblue')))
+points(set, pch = 21,
+       bg = ifelse(set[,3] == 1, 'green4',
+                   ifelse(set[,3]==2,
+                          'red3', 'blue3')))
+
+```
+
+### Visualizing the Test Set
+```{r VizTest}
+set = Test_set_pca
+X1 = seq(min(set[,1])-1, max(set[,1])+1, by = 0.01)
+X2 = seq(min(set[,2])-1, max(set[,2])+1, by = 0.01)
+grid_set = expand.grid(X1, X2)
+colnames(grid_set) = c('PC1', 'PC2')
+y_grid = predict(classif, newdata = grid_set)
+plot(set[,-3],
+     main = "SVM with PCA (Test Set)",
+     xlab = "PC1", ylab = "PC2",
+     xlim = range(X1), ylim = range(X2))
+contour(X1, X2,
+        matrix(as.numeric(y_grid), 
+               length(X1), length(X2)),
+        add = TRUE)
+points(grid_set, pch = ".", 
+       col = ifelse(
+       y_grid == 1, 'springgreen3',
+       ifelse(y_grid == 2, 
+              'tomato', 'deepskyblue')))
+points(set, pch = 21,
+       bg = ifelse(set[,3] == 1, 'green4',
+                   ifelse(set[,3]==2,
+                          'red3', 'blue3')))
+
+```
+
+## LDA 
+
+### Data Preprocessing
+```{r PrePro}
+set.seed(43)
+#Train/Test Split
+split = sample.split(Wine$Customer_Segment, SplitRatio = 0.8)
+Train_set = subset(Wine, split == TRUE)
+Test_set = subset(Wine, split == FALSE)
+
+#Feature Scaling
+Train_set[-14] = scale(Train_set[-14]) 
+Test_set[-14] = scale(Test_set[-14])
+```
+
+### Applying LDA
+```{r LDA}
+library(MASS)
+lda = lda(formula = Customer_Segment ~ .,
+          data = Train_set)
+Train_set_lda = 
+  as.data.frame(predict(lda, Train_set))
+Train_set_lda = Train_set_lda[c(5,6,1)]
+
+Test_set_lda = 
+  as.data.frame(predict(lda, Test_set))
+Test_set_lda = Test_set_lda[c(5,6,1)]
+```
+
+### Fitting the SVM Model
+```{r LDA_SVM}
+classif = 
+  svm(formula = class ~ .,
+              data = Train_set_lda,
+              type = 'C-classification',
+              kernal = 'linear')
+```
+
+### Predictions
+```{r preds_lda}
+preds = 
+  predict(classif, 
+          newdata = Test_set_lda[-3])
+cm = table(Test_set_lda[,3], preds)
+cm
+```
+
+The confusion matrix above shows that the SVM model built using LDA has perfectly predicted the test set. Yay!
+
+### Visualizing the Training Set
+```{r VizTrain_LDA}
+library(ElemStatLearn)
+set = Train_set_lda
+X1 = seq(min(set[,1])-1, max(set[,1])+1, by = 0.01)
+X2 = seq(min(set[,2])-1, max(set[,2])+1, by = 0.01)
+grid_set = expand.grid(X1, X2)
+colnames(grid_set) = c('x.LD1', 'x.LD2')
+y_grid = predict(classif, newdata = grid_set)
+plot(set[,-3],
+     main = "SVM with LDA (Training Set)",
+     xlab = "LD1", ylab = "LD2",
+     xlim = range(X1), ylim = range(X2))
+contour(X1, X2,
+        matrix(as.numeric(y_grid), 
+               length(X1), length(X2)),
+        add = TRUE)
+points(grid_set, pch = ".", 
+       col = ifelse(
+       y_grid == 1, 'springgreen3',
+       ifelse(y_grid == 2, 
+              'tomato', 'deepskyblue')))
+points(set, pch = 21,
+       bg = ifelse(set[,3] == 1, 'green4',
+                   ifelse(set[,3]==2,
+                          'red3', 'blue3')))
+```
+
+### Visualizing the Test Data
+```{r VizTest_LDA}
+set = Test_set_lda
+X1 = seq(min(set[,1])-1, max(set[,1])+1, by = 0.01)
+X2 = seq(min(set[,2])-1, max(set[,2])+1, by = 0.01)
+grid_set = expand.grid(X1, X2)
+colnames(grid_set) = c('x.LD1', 'x.LD2')
+y_grid = predict(classif, newdata = grid_set)
+plot(set[,-3],
+     main = "SVM with LDA (Test Set)",
+     xlab = "LD1", ylab = "LD2",
+     xlim = range(X1), ylim = range(X2))
+contour(X1, X2,
+        matrix(as.numeric(y_grid), 
+               length(X1), length(X2)),
+        add = TRUE)
+points(grid_set, pch = ".", 
+       col = ifelse(
+       y_grid == 1, 'springgreen3',
+       ifelse(y_grid == 2, 
+              'tomato', 'deepskyblue')))
+points(set, pch = 21,
+       bg = ifelse(set[,3] == 1, 'green4',
+                   ifelse(set[,3]==2,
+                          'red3', 'blue3')))
+```
+
+## Kernal PCA
+
+### Importing the Data for the Kernal PCA
+```{r KPCA_Data_Import}
+SN_Ads <- read_csv("~/work/Practice/Python/FeatureExtraction/Social_Network_Ads.csv")
+View(Social_Network_Ads)
+
+data <- SN_Ads[,3:5]
+```
+
+First, let's review the model created for this data without using KPCA so that we can have some idea of why KPCA would be a useful method.
+
+### Train/Test Split
+```{r TT_Split}
+library(caTools)
+set.seed(123)
+split = sample.split(data$Purchased, SplitRatio = 0.75)
+
+Train_set <- subset(data, split = TRUE)
+Test_set <- subset(data, split = FALSE)
+```
+
+### Feature Scaling
+```{r Feat_Scal}
+Train_set[,1:2] <-
+  scale(Train_set[,1:2])
+Test_set[,1:2] <-
+  scale(Test_set[,1:2])
+```
+
+### Fitting the SVM Model to the Data
+```{r SVM}
+library(e1071)
+classif = 
+  svm(formula = Purchased ~ .,
+              data = Train_set,
+              type = 'C-classification',
+              kernal = "radial basis")
+
+```
+
+
+### Predicting on the KPCA Data
+```{r preds}
+preds <- predict(classif, newdata = Test_set[-3])
+cm <- table(Test_set$Purchased, preds)
+cm
+```
+
+
+### Visualizing the Training Set
+```{r VizTrain}
+library(ElemStatLearn)
+set = Train_set
+X1 = seq(min(set[,1])-1, max(set[,1])+1, by = 0.01)
+X2 = seq(min(set[,2])-1, max(set[,2])+1, by = 0.01)
+grid_set = expand.grid(X1, X2)
+colnames(grid_set) = c('Age', 'EstimatedSalary')
+y_grid = predict(classif, newdata = grid_set)
+plot(set[,-3],
+     main = "SVM with KPCA (Training Set)",
+     xlab = "Age", ylab = "Estimated Salary",
+     xlim = range(X1), ylim = range(X2))
+contour(X1, X2,
+        matrix(as.numeric(y_grid), 
+               length(X1), length(X2)),
+        add = TRUE)
+points(grid_set, pch = ".", 
+       col = ifelse(
+       y_grid == 1, 'springgreen3',
+       'deepskyblue'))
+points(set, pch = 21,
+       bg = ifelse(set[,3] == 1, 'green4',
+                   'blue3'))
+```
+
+
+### Visualizing the Test Data
+```{r VizTest}
+set = Test_set
+X1 = seq(min(set[,1])-1, max(set[,1])+1, by = 0.01)
+X2 = seq(min(set[,2])-1, max(set[,2])+1, by = 0.01)
+grid_set = expand.grid(X1, X2)
+colnames(grid_set) = c('Age', 'EstimatedSalary')
+y_grid = predict(classif, newdata = grid_set)
+plot(set[,-3],
+     main = "SVM with KPCA (Test Set)",
+     xlab = "Age", ylab = "Estimated Salary",
+     xlim = range(X1), ylim = range(X2))
+contour(X1, X2,
+        matrix(as.numeric(y_grid), 
+               length(X1), length(X2)),
+        add = TRUE)
+points(grid_set, pch = ".", 
+       col = ifelse(
+       y_grid == 1, 'springgreen3',
+       'deepskyblue'))
+points(set, pch = 21,
+       bg = ifelse(set[,3] == 1, 'green4',
+                   'blue3'))
+```
+
+Now that we have seen the performance of the model without KPCA, lets redo the analysis with the appliaction of KPCA.
+
+### Train/Test Split
+```{r KPC_TT_Split}
+library(caTools)
+set.seed(123)
+split = sample.split(data$Purchased, SplitRatio = 0.75)
+
+Train_set_kpca <- subset(data, split = TRUE)
+Test_set_kpca <- subset(data, split = FALSE)
+```
+
+### Feature Scaling
+```{r Kpca_Feat_Scal}
+Train_set_kpca[,1:2] <-
+  scale(Train_set_kpca[,1:2])
+Test_set_kpca[,1:2] <-
+  scale(Test_set_kpca[,1:2])
+```
+
+### Applying KPCA
+```{r KPCA}
+library(kernlab)
+kpca <- 
+  kpca(~., Train_set_kpca[,-3], 
+       kernal = "rbfdot", features = 2)
+Train_feats_kpca <-
+  as.data.frame(predict(kpca,
+                        Train_set_kpca))
+Train_feats_kpca$Purchased <-
+  Train_set_kpca$Purchased
+
+Test_feats_kpca <-
+  as.data.frame(predict(kpca,
+                        Test_set_kpca))
+Test_feats_kpca$Purchased <- Test_set_kpca$Purchased
+```
+
+### Fitting the SVM Model to the Data
+```{r KPCA_SVM}
+library(e1071)
+classif = 
+  svm(formula = Purchased ~ .,
+              data = Train_feats_kpca,
+              type = 'C-classification',
+              kernal = "radial basis")
+
+```
+
+
+### Predicting on the KPCA Data
+```{r KPCA_preds}
+preds <- predict(classif, newdata = Test_feats_kpca[-3])
+cm <- table(Test_feats_kpca[,3], preds)
+cm
+```
+
+
+### Visualizing the Training Set
+```{r VizTrain_KPCA}
+library(ElemStatLearn)
+set = Train_feats_kpca
+X1 = seq(min(set[,1])-1, max(set[,1])+1, by = 0.01)
+X2 = seq(min(set[,2])-1, max(set[,2])+1, by = 0.01)
+grid_set = expand.grid(X1, X2)
+colnames(grid_set) = c('V1', 'V2')
+y_grid = predict(classif, newdata = grid_set)
+plot(set[,-3],
+     main = "SVM with KPCA (Training Set)",
+     xlab = "V1", ylab = "V2",
+     xlim = range(X1), ylim = range(X2))
+contour(X1, X2,
+        matrix(as.numeric(y_grid), 
+               length(X1), length(X2)),
+        add = TRUE)
+points(grid_set, pch = ".", 
+       col = ifelse(
+       y_grid == 1, 'springgreen3',
+       'deepskyblue'))
+points(set, pch = 21,
+       bg = ifelse(set[,3] == 1, 'green4',
+                   'blue3'))
+```
+
+
+### Visualizing the Test Data
+```{r VizTest_LDA}
+set = Test_feats_kpca
+X1 = seq(min(set[,1])-1, max(set[,1])+1, by = 0.01)
+X2 = seq(min(set[,2])-1, max(set[,2])+1, by = 0.01)
+grid_set = expand.grid(X1, X2)
+colnames(grid_set) = c('V1', 'V2')
+y_grid = predict(classif, newdata = grid_set)
+plot(set[,-3],
+     main = "SVM with KPCA (Test Set)",
+     xlab = "V1", ylab = "V2",
+     xlim = range(X1), ylim = range(X2))
+contour(X1, X2,
+        matrix(as.numeric(y_grid), 
+               length(X1), length(X2)),
+        add = TRUE)
+points(grid_set, pch = ".", 
+       col = ifelse(
+       y_grid == 1, 'springgreen3',
+       'deepskyblue'))
+points(set, pch = 21,
+       bg = ifelse(set[,3] == 1, 'green4',
+                   'blue3'))
+```
